@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <title>شموع للإنتاج — نظام الحضور</title>
+  <script>
+    window.onerror = function (msg, url, line, col, error) {
+      console.error("FATAL ERROR: ", msg, "at line:", line, "col:", col);
+    };
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+
+<body>
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <div id="sidebarOverlay" onclick="closeSidebar()"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;backdrop-filter:blur(2px);"></div>
+
+  <div id="sidebar"
+    style="position:fixed;right:-280px;top:0;bottom:0;width:280px;background:var(--surface);border-left:1px solid var(--border);z-index:401;transition:right 0.3s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- Sidebar header (User Info Only) -->
+    <div style="padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+      <div>
+        <div id="sidebarUserName" style="font-size:14px;font-weight:700;color:var(--accent);"></div>
+        <div style="font-size:10px;color:var(--text-muted);">لوحة التحكم</div>
+      </div>
+    </div>
+
+    <!-- Nav items -->
+    <nav style="flex:1;padding:12px 8px;overflow-y:auto;">
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);padding:8px 12px;letter-spacing:1px;">القائمة
+      </div>
+      <button class="sidebar-item" id="sidebar-dashboard" onclick="sidebarNav('dashboard')">الرئيسية</button>
+      <button class="sidebar-item" id="sidebar-sessions" onclick="sidebarNav('sessions')">الجلسات</button>
+      <button class="sidebar-item" id="sidebar-attendance" onclick="sidebarNav('attendance')">تسجيل الحضور</button>
+      <button class="sidebar-item" id="sidebar-members" onclick="sidebarNav('members')">الأعضاء</button>
+      <button class="sidebar-item" id="sidebar-registrations" onclick="sidebarNav('registrations')">المسجلون</button>
+      <div id="sidebar-admin-section" style="display:none;">
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);padding:16px 12px 8px;letter-spacing:1px;">
+          الإدارة</div>
+        <button class="sidebar-item" id="sidebar-activityLog" onclick="sidebarNav('activityLog')">سجل النشاط</button>
+        <button class="sidebar-item" id="sidebar-admins" onclick="sidebarNav('admins')">إدارة المديرين</button>
+        <button class="sidebar-item" id="sidebar-backup" onclick="sidebarNav('backup')">النسخة الاحتياطية</button>
+      </div>
+    </nav>
+
+    <!-- User info + logout at bottom -->
+    <div style="padding:16px;border-top:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div id="sidebarAvatar"
+          style="width:38px;height:38px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:#fff;flex-shrink:0;">
+        </div>
+        <div>
+          <div id="sidebarFullName" style="font-size:13px;font-weight:700;color:var(--text);"></div>
+          <div id="sidebarRole" style="font-size:10px;color:var(--text-muted);"></div>
+        </div>
+      </div>
+      <button onclick="doLogout()"
+        style="width:100%;padding:10px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.25);border-radius:8px;color:var(--red);font-family:'Alexandria',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:background 0.2s;"
+        onmouseenter="this.style.background='rgba(231,76,60,0.2)'"
+        onmouseleave="this.style.background='rgba(231,76,60,0.1)'">
+        تسجيل الخروج
+      </button>
+    </div>
+  </div>
+
+
+
+  <div id="loginScreen"
+    style="position:fixed;inset:0;background:var(--bg);z-index:9999;display:none;align-items:center;justify-content:center;">
+    <div style="width:100%;max-width:400px;padding:24px;">
+
+      <!-- Logo + title -->
+      <div style="text-align:center;margin-bottom:36px;">
+        <img src="assets/logo.png" alt="شعار" style="max-height:120px; width:auto; margin-bottom:20px;">
+        <div style="font-size:26px;font-weight:900;color:#fff;margin-bottom:4px;">إدارة المجتمع</div>
+        <div style="font-size:14px;color:var(--text-muted);">نظام إدارة الحضور</div>
+      </div>
+
+      <!-- Card -->
+      <div
+        style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+        <div style="font-size:15px;font-weight:700;margin-bottom:20px;color:var(--text);">تسجيل الدخول</div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">اسم
+            المستخدم</label>
+          <input id="loginUser" type="text" placeholder="أدخل اسم المستخدم"
+            style="width:100%;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Alexandria',sans-serif;font-size:14px;outline:none;"
+            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
+            onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">كلمة
+            السر</label>
+          <input id="loginPass" type="password" placeholder="أدخل كلمة السر"
+            style="width:100%;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Alexandria',sans-serif;font-size:14px;outline:none;"
+            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
+            onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+
+        <div id="loginError"
+          style="display:none;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:14px;text-align:center;">
+          اسم المستخدم أو كلمة السر غير صحيحة
+        </div>
+
+        <button onclick="doLogin()"
+          style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:'Alexandria',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:background 0.2s;"
+          onmouseenter="this.style.background='#d4621a'" onmouseleave="this.style.background='var(--accent)'">
+          دخول
+        </button>
+      </div>
+
+      <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted);">
+        شموع للإنتاج © 2026
+      </div>
+    </div>
+  </div>
+
+  <!-- Logout button (hidden until logged in) -->
+
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Header -->
+  <header class="header" id="appHeader" style="display:none;">
+    <!-- Hamburger button -->
+    <button id="hamburgerBtn" onclick="toggleSidebar()"
+      style="background:transparent;border:none;cursor:pointer;padding:8px;border-radius:8px;display:flex;flex-direction:column;gap:5px;transition:background 0.2s;flex-shrink:0;"
+      onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background='transparent'">
+      <span
+        style="display:block;width:22px;height:2px;background:var(--text);border-radius:2px;transition:all 0.3s;"></span>
+      <span
+        style="display:block;width:22px;height:2px;background:var(--text);border-radius:2px;transition:all 0.3s;"></span>
+      <span
+        style="display:block;width:22px;height:2px;background:var(--text);border-radius:2px;transition:all 0.3s;"></span>
+    </button>
+    <div class="logo" style="display:flex; align-items:center; gap:8px;">
+      <img src="assets/logo.png" alt="شعار" style="height:32px; width:auto;">
+      <div style="text-align:center;">
+        <div class="logo-text" style="font-size:18px;">إدارة المجتمع</div>
+      </div>
+    </div>
+    <nav class="nav" style="display:none;">
+      <button class="nav-btn active" onclick="showView('dashboard')" id="nav-dashboard"><span>الرئيسية</span></button>
+      <button class="nav-btn" onclick="showView('sessions')" id="nav-sessions"><span>الجلسات</span></button>
+      <button class="nav-btn" onclick="showView('attendance')" id="nav-attendance"><span>تسجيل الحضور</span></button>
+      <button class="nav-btn" onclick="showView('members')" id="nav-members"><span>الأعضاء</span></button>
+      <button class="nav-btn" onclick="showView('registrations')" id="nav-registrations"><span>المسجلون</span></button>
+      <button class="nav-btn" onclick="showView('activityLog')" id="nav-activityLog" style="display:none;"><span>سجل
+          النشاط</span></button>
+    </nav>
+    <!-- User dropdown -->
+    <div style="position:relative; display:none;" id="userMenuWrap">
+      <div id="headerUser" onclick="toggleUserMenu()"
+        style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 10px;border-radius:10px;transition:background 0.2s;"
+        onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background='transparent'">
+        <div style="text-align:left;">
+          <div id="headerUserName" style="font-size:13px;font-weight:700;color:var(--text);"></div>
+          <div id="headerUserRole" style="font-size:10px;color:var(--text-muted);"></div>
+        </div>
+        <div id="headerUserAvatar"
+          style="width:34px;height:34px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;flex-shrink:0;">
+        </div>
+      </div>
+      <!-- Dropdown -->
+      <div id="userMenuDropdown"
+        style="display:none;position:absolute;left:0;top:calc(100% + 8px);background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.4);min-width:160px;overflow:hidden;z-index:300;">
+        <button onclick="openProfileModal()" id="userMenuProfileBtn"
+          style="width:100%;padding:12px 16px;background:transparent;border:none;color:var(--text);font-family:'Alexandria',sans-serif;font-size:13px;font-weight:700;cursor:pointer;text-align:right;transition:background 0.15s; border-bottom:1px solid var(--border);"
+          onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background='transparent'">
+          إعدادات حسابي
+        </button>
+        <button onclick="doLogout()"
+          style="width:100%;padding:12px 16px;background:transparent;border:none;color:var(--red);font-family:'Alexandria',sans-serif;font-size:13px;font-weight:700;cursor:pointer;text-align:right;transition:background 0.15s;"
+          onmouseenter="this.style.background='rgba(231,76,60,0.1)'" onmouseleave="this.style.background='transparent'">
+          تسجيل الخروج
+        </button>
+      </div>
+    </div>
+
+    <!-- Sync Indicator (auto only) -->
+    <div id="syncIndicator"
+      style="position:absolute; left:24px; top:50%; transform:translateY(-50%); display:flex; align-items:center; background:var(--surface2); padding:6px 12px; border-radius:8px; border:1px solid var(--border); transition:all 0.3s;">
+    </div>
+
+  </header>
+
+  <main class="main" id="appMain" style="display:none;">
+
+    <!-- ═══════ DASHBOARD ═══════ -->
+    <div class="view active" id="view-dashboard">
+      <div class="page-title">
+        <h1>لوحة التحكم</h1>
+      </div>
+
+      <!-- Quick Search -->
+      <div style="position:relative;margin-bottom:20px;">
+        <input type="text" id="dashSearch" placeholder="ابحث عن عضو بالاسم أو المدينة أو الهاتف..."
+          oninput="renderDashSearch()"
+          style="width:100%;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'Alexandria',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s,box-shadow 0.2s;"
+          onfocus="this.style.borderColor='var(--accent)';this.style.boxShadow='0 0 0 3px rgba(245,118,26,0.15)'"
+          onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+        <div id="dashSearchResults"
+          style="display:none;position:absolute;top:calc(100% + 6px);right:0;left:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:50;max-height:380px;overflow-y:auto;">
+        </div>
+      </div>
+
+      <div class="stats-row" id="statsRow"></div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">الجلسات الأخيرة</div>
+            <button class="btn btn-ghost btn-sm" onclick="showView('sessions')">عرض الكل</button>
+          </div>
+          <div id="recentSessions"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">أعلى حضور</div>
+          </div>
+          <div id="topMembers"></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">أعضاء يحتاجون متابعة (حضور أقل من 50%)</div>
+          <span id="atRiskCount" class="badge">0</span>
+        </div>
+        <div id="atRiskList"></div>
+      </div>
+    </div>
+
+    <!-- ═══════ SESSIONS ═══════ -->
+    <div class="view" id="view-sessions">
+      <div class="page-title">
+        <h1>إدارة الجلسات</h1>
+        <button class="btn btn-primary" onclick="openModal('addSession')">إضافة جلسة</button>
+      </div>
+
+      <div id="sessionsList"></div>
+    </div>
+
+    <!-- ═══════ ATTENDANCE ═══════ -->
+    <div class="view" id="view-attendance">
+      <div class="page-title">
+        <h1>تسجيل الحضور</h1>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title" style="margin-bottom:12px;">اختر الجلسة</div>
+        <div class="session-pills" id="sessionPills"></div>
+      </div>
+
+      <div id="attendancePanel"></div>
+    </div>
+
+    <!-- ═══════ MEMBERS ═══════ -->
+    <div class="view" id="view-members">
+      <div class="page-title">
+        <h1>الأعضاء</h1>
+        <span id="members-count-badge" class="badge"></span>
+        <button class="btn btn-ghost" onclick="openBulkModal()"
+          style="border-color:var(--blue);color:var(--blue);">إرسال للكل</button>
+        <button class="btn btn-primary" onclick="openModal('addMember')">إضافة عضو</button>
+      </div>
+
+      <div class="card"
+        style="margin-bottom:16px;padding:14px 20px; display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; align-items:center;">
+        <div style="display:flex; gap:10px; flex:1; flex-wrap:wrap; min-width:260px;">
+          <input type="text" class="search-input" id="memberSearch" placeholder="ابحث باسم العضو أو مدينته..."
+            style="flex:1; min-width:200px;" oninput="renderMembersTable()">
+          <select id="memberSort" class="form-select" style="width:auto; padding:0 15px; flex:1; min-width:180px;"
+            onchange="renderMembersTable()">
+            <option value="default">ترتيب حسب المعرف (ID)</option>
+            <option value="attendance_desc">أعلى نسبة حضور</option>
+            <option value="attendance_asc">أقل نسبة حضور</option>
+          </select>
+        </div>
+        <div id="membersBulkActions"
+          style="display:none; flex-wrap:wrap; gap:8px; align-items:center; background:rgba(245,118,26,0.1); padding:6px 12px; border-radius:8px; border:1px solid rgba(245,118,26,0.3);">
+          <span style="font-size:12px; font-weight:700; color:var(--accent);" id="membersBulkCount">0 محدد</span>
+          <button class="btn btn-ghost btn-sm" style="color:var(--blue);" onclick="bulkEmailMembers()">مراسلة</button>
+          <button class="btn btn-danger btn-sm" onclick="bulkDeleteMembers()">حذف</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllMembers"
+                    onchange="toggleAllMembers(this.checked)" style="accent-color:var(--accent); cursor:pointer;"></th>
+                <th>#</th>
+                <th>الاسم</th>
+                <th>جلسات حضر</th>
+                <th>نسبة الحضور</th>
+                <th>إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="membersBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ REGISTRATIONS ═══════ -->
+    <div class="view" id="view-registrations">
+      <div class="page-title">
+        <h1>قائمة المسجلين</h1>
+        <span class="badge" id="reg-total-badge">0</span>
+        <button class="btn btn-primary" onclick="openModal('addRegistration')" style="margin-right:auto;">+ تسجيل
+          يدوي</button>
+      </div>
+
+      <!-- Search + filters row -->
+      <div class="card" style="margin-bottom:16px;padding:14px 20px;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+          <div class="search-bar" style="margin-bottom:0;flex:1;min-width:200px;">
+            <input type="text" class="search-input" id="regSearch" placeholder="ابحث بالاسم، المدينة، المهارة..."
+              oninput="renderRegistrations()">
+          </div>
+          <select class="form-select" style="width:auto;padding:8px 14px;font-size:12px;flex:1;min-width:110px;"
+            id="regFilterStatus" onchange="renderRegistrations()">
+            <option value="">كل الحالات</option>
+            <option value="مقبول">مقبول</option>
+            <option value="ينظر فيه">ينظر فيه</option>
+            <option value="مسحوب">مسحوب</option>
+          </select>
+          <select class="form-select" style="width:auto;padding:8px 14px;font-size:12px;flex:1;min-width:110px;"
+            id="regFilterCity" onchange="renderRegistrations()">
+            <option value="">كل المدن</option>
+          </select>
+          <select class="form-select" style="width:auto;padding:8px 14px;font-size:12px;flex:1;min-width:130px;"
+            id="regFilterContact" onchange="renderRegistrations()">
+            <option value="">كل حالات الاتصال</option>
+            <option value="اكد الحضور">أكد الحضور</option>
+            <option value="لن يحضر">لن يحضر</option>
+            <option value="لم يرد على 3 اتصالات">لم يرد</option>
+            <option value="تم الاتصال">تم الاتصال</option>
+          </select>
+        </div>
+        <div id="regsBulkActions"
+          style="display:none; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); gap:8px; align-items:center;">
+          <span style="font-size:12px; font-weight:700; color:var(--accent);" id="regsBulkCount">0 محدد</span>
+          <button class="btn btn-success btn-sm" onclick="bulkAcceptRegs()">قبول وإضافة</button>
+          <button class="btn btn-danger btn-sm" onclick="bulkRejectRegs()">رفض/سحب</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--blue);" onclick="bulkEmailRegs()">مراسلة</button>
+          <button class="btn btn-danger btn-sm" style="background:transparent; border:1px solid var(--red);"
+            onclick="bulkDeleteRegs()">حذف نهائي</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllRegs"
+                    onchange="toggleAllRegs(this.checked)" style="accent-color:var(--accent); cursor:pointer;"></th>
+                <th>#</th>
+                <th>الاسم</th>
+                <th>الحالة</th>
+                <th>إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="regBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ ACTIVITY LOG ═══════ -->
+    <div class="view" id="view-activityLog">
+      <div class="page-title">
+        <h1>سجل النشاط</h1>
+        <span class="badge" id="activityBadge">0</span>
+        <button class="btn btn-danger btn-sm" onclick="clearActivityLog()" style="margin-right:auto;">مسح
+          السجل</button>
+      </div>
+      <div class="card" style="margin-bottom:16px;padding:14px 20px;display:flex;gap:10px;align-items:center;">
+        <input type="text" class="search-input" id="activitySearch" placeholder="ابحث في السجل..."
+          oninput="renderActivityLog()" style="flex:1;">
+        <button class="btn btn-ghost btn-sm"
+          onclick="saveLog('اختبار','تم الضغط على زر الاختبار');renderActivityLog();toast('تم تسجيل حدث اختبار ✅');">اختبار</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>المستخدم</th>
+                <th>الإجراء</th>
+                <th>التفاصيل</th>
+                <th>الوقت</th>
+              </tr>
+            </thead>
+            <tbody id="activityBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ ADMINS ═══════ -->
+    <div class="view" id="view-admins">
+      <div class="page-title">
+        <h1>إدارة المديرين</h1>
+        <button class="btn btn-primary" onclick="openAdminModal()">إضافة مدير</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>الاسم الكامل</th>
+                <th>اسم المستخدم</th>
+                <th>الرتبة</th>
+                <th>كلمة السر</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="adminsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ BACKUP ═══════ -->
+    <div class="view" id="view-backup">
+      <div class="page-title">
+        <h1>النسخة الاحتياطية</h1>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">صيانة ونسخ النظام</div>
+        </div>
+        <div style="padding:20px; display:flex; gap:12px; flex-wrap:wrap;">
+          <button class="btn btn-ghost" onclick="exportBackup()"
+            style="display:flex; align-items:center; gap:8px; border:1px solid var(--border);">
+            تصدير نسخة احتياطية للموقع
+          </button>
+          <label class="btn btn-ghost"
+            style="display:flex; align-items:center; gap:8px; cursor:pointer; border:1px solid var(--border);">
+            استيراد نسخة احتياطية
+            <input type="file" id="importFile" style="display:none;" onchange="handleImportBackup(event)">
+          </label>
+        </div>
+        <div style="padding:0 20px 20px; font-size:12px; color:var(--text-muted);">
+          * ملاحظة: تصدير النسخة الاحتياطية يحفظ كافة البيانات (الأعضاء، الجلسات، الحضور، الإعدادات) في ملف على جهازك.
+          استيراد النسخة سيؤدي إلى استبدال البيانات الحالية بالكامل.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ═══════ MODALS ═══════ -->
+
+  <!-- Add Session Modal -->
+  <div class="modal-overlay" id="modal-addSession">
+    <div class="modal">
+      <div class="modal-title">إضافة جلسة جديدة</div>
+      <div class="form-group">
+        <label class="form-label">اسم الجلسة *</label>
+        <input type="text" class="form-input" id="sessionName" placeholder="مثال: الجلسة الحادية عشرة">
+      </div>
+      <div class="form-group">
+        <label class="form-label">تاريخ الجلسة</label>
+        <input type="date" class="form-input" id="sessionDate">
+      </div>
+      <div class="form-group">
+        <label class="form-label">موضوع الجلسة</label>
+        <input type="text" class="form-input" id="sessionTopic" placeholder="مثال: هندسة المشهد، صناعة المحتوى...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">المحاضر</label>
+        <input type="text" class="form-input" id="sessionLecturer" placeholder="اسم المحاضر">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('addSession')">إلغاء</button>
+        <button class="btn btn-primary" onclick="addSession()">إضافة الجلسة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Modal -->
+  <div class="modal-overlay" id="modal-admin">
+    <div class="modal">
+      <div class="modal-title" id="adminModalTitle">إضافة مدير</div>
+      <input type="hidden" id="adminEditOldUsername">
+      <div class="form-group">
+        <label class="form-label">الاسم الكامل *</label>
+        <input type="text" class="form-input" id="adminFullName" placeholder="الاسم واللقب">
+      </div>
+      <div class="form-group">
+        <label class="form-label">اسم المستخدم *</label>
+        <input type="text" class="form-input" id="adminUsername" placeholder="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">كلمة السر *</label>
+        <input type="text" class="form-input" id="adminPassword" placeholder="password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">الرتبة</label>
+        <select class="form-select" id="adminRole">
+          <option value="admin">عضو فريق</option>
+          <option value="superadmin">مدير نظام</option>
+        </select>
+      </div>
+      <div class="form-group" id="adminPermissionsGroup"
+        style="display:none; margin-top:15px; padding:18px; background:var(--bg); border:1px solid var(--border); border-radius:12px;">
+        <label class="form-label" style="margin-bottom:14px; color:var(--accent); font-size:14px; font-weight:800;">🔐
+          صلاحيات المدير</label>
+
+        <div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border);">
+          <label class="perm-toggle">
+            <span class="perm-label">🛡️ إدارة المديرين</span>
+            <input type="checkbox" id="perm_manage_admins" class="perm-switch">
+            <span class="perm-slider"></span>
+          </label>
+          <label class="perm-toggle">
+            <span class="perm-label">📋 سجل النشاطات</span>
+            <input type="checkbox" id="perm_view_activity" class="perm-switch">
+            <span class="perm-slider"></span>
+          </label>
+          <label class="perm-toggle">
+            <span class="perm-label">💾 النسخ الاحتياطي</span>
+            <input type="checkbox" id="perm_manage_backups" class="perm-switch">
+            <span class="perm-slider"></span>
+          </label>
+          <label class="perm-toggle">
+            <span class="perm-label">🔑 تعديل الحساب</span>
+            <input type="checkbox" id="perm_edit_profile" class="perm-switch">
+            <span class="perm-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('admin')">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveAdminDetails()">حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile Settings Modal -->
+  <div class="modal-overlay" id="modal-profile">
+    <div class="modal">
+      <div class="modal-title">إعدادات الحساب</div>
+      <div class="form-group">
+        <label class="form-label">اسم المستخدم الجديد</label>
+        <input type="text" class="form-input" id="profileUsername" placeholder="اتركه فارغاً للإبقاء عليه">
+      </div>
+      <div class="form-group">
+        <label class="form-label">كلمة السر الجديدة</label>
+        <input type="text" class="form-input" id="profilePassword" placeholder="اتركها فارغة للإبقاء عليها">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('profile')">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveProfile()">حفظ التغييرات</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Member Modal -->
+  <div class="modal-overlay" id="modal-addMember">
+    <div class="modal">
+      <div class="modal-title">إضافة عضو جديد</div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">الاسم الكامل *</label>
+          <input type="text" class="form-input" id="memberName" placeholder="الاسم واللقب">
+        </div>
+        <div class="form-group">
+          <label class="form-label">العمر</label>
+          <input type="number" class="form-input" id="memberAge" placeholder="العمر">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">المدينة</label>
+          <input type="text" class="form-input" id="memberCity" placeholder="المدينة">
+        </div>
+        <div class="form-group">
+          <label class="form-label">رقم الهاتف</label>
+          <input type="text" class="form-input" id="memberPhone" placeholder="05XXXXXXXX">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">البريد الإلكتروني</label>
+        <input type="email" class="form-input" id="memberEmail" placeholder="example@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">الحالة</label>
+        <select class="form-select" id="memberStatus">
+          <option value="مقبول">مقبول</option>
+          <option value="ينظر فيه">ينظر فيه</option>
+          <option value="يسحب">يسحب</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">مهاراته الحالية</label>
+        <input type="text" class="form-input" id="memberSkills" placeholder="التصوير، المونتاج...">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('addMember')">إلغاء</button>
+        <button class="btn btn-primary" onclick="addMember()">إضافة العضو</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Session Details Modal -->
+  <div class="modal-overlay" id="modal-sessionDetails">
+    <div class="modal" style="width:600px;">
+      <div class="modal-title" id="sessionDetailsTitle">تفاصيل الجلسة</div>
+      <div id="sessionDetailsContent"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('sessionDetails')">إغلاق</button>
+        <button class="btn btn-primary" onclick="goToAttendFromModal()">تعديل الحضور</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Member Modal -->
+  <div class="modal-overlay" id="modal-editMember">
+    <div class="modal">
+      <div class="modal-title">تعديل بيانات العضو</div>
+      <input type="hidden" id="editMemberId">
+      <div class="form-group">
+        <label class="form-label">الاسم الكامل</label>
+        <input type="text" class="form-input" id="editMemberName">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">المدينة</label>
+          <input type="text" class="form-input" id="editMemberCity">
+        </div>
+        <div class="form-group">
+          <label class="form-label">رقم الهاتف</label>
+          <input type="text" class="form-input" id="editMemberPhone">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">الحالة</label>
+        <select class="form-select" id="editMemberStatus">
+          <option value="مقبول">مقبول</option>
+          <option value="ينظر فيه">ينظر فيه</option>
+          <option value="يسحب">يسحب</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ملاحظة</label>
+        <input type="text" class="form-input" id="editMemberNote">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('editMember')">إلغاء</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteMember()">حذف</button>
+        <button class="btn btn-primary" onclick="saveEditMember()">حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Follow Up Modal -->
+  <div class="modal-overlay" id="modal-followUp">
+    <div class="modal" style="width:600px;">
+      <div class="modal-title">متابعة عضو (فرصة أم سحب)</div>
+      <input type="hidden" id="followUpMemberId">
+
+      <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;">
+        <div style="font-size:16px;font-weight:900;" id="followUpName"></div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;" id="followUpInfo"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">نتيجة الاتصال وملاحظة الغياب *</label>
+        <textarea class="form-input" id="followUpNote" rows="3" placeholder="اكتب نتيجة الاتصال أو سبب الغياب هنا..."
+          style="resize:vertical;"></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('followUp')">إلغاء</button>
+        <button class="btn btn-danger" onclick="submitFollowUp('withdraw')">عذر غير مقنع (سحب العضو)</button>
+        <button class="btn btn-primary" onclick="submitFollowUp('stay')" style="background:#2ecc71;box-shadow:none;">عذر
+          مقنع (تصفير وبقاء)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Application Scripts -->
+  <script src="script.js?v=2"></script>
+
+  <!-- Registration Detail Modal -->
+  <div class="modal-overlay" id="modal-regDetail">
+    <div class="modal" style="width:680px;max-height:90vh;overflow-y:auto;">
+      <div class="modal-title" id="regDetailTitle">بيانات المسجّل</div>
+      <div id="regDetailContent"></div>
+      <div id="regDetailFooter"
+        style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <div id="regDetailAction"></div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary btn-sm" id="regEditBtn" onclick="openEditRegistration()">تعديل</button>
+          <button class="btn btn-ghost" style="color:var(--blue);" id="regEmailBtn" onclick="openRegDetailEmail()">إرسال
+            بريد</button>
+          <button class="btn btn-ghost" onclick="closeModal('regDetail')">إغلاق</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Registration Modal -->
+  <div class="modal-overlay" id="modal-editRegistration">
+    <div class="modal" style="width:560px;">
+      <div class="modal-title">تعديل بيانات المسجّل</div>
+      <input type="hidden" id="editRegId">
+      <div class="form-group">
+        <label class="form-label">الاسم الكامل</label>
+        <input type="text" class="form-input" id="editRegName">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">العمر</label>
+          <input type="number" class="form-input" id="editRegAge">
+        </div>
+        <div class="form-group">
+          <label class="form-label">المدينة</label>
+          <input type="text" class="form-input" id="editRegCity">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">رقم الهاتف</label>
+          <input type="text" class="form-input" id="editRegPhone">
+        </div>
+        <div class="form-group">
+          <label class="form-label">البريد الإلكتروني</label>
+          <input type="email" class="form-input" id="editRegEmail">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">حالة التسجيل</label>
+          <select class="form-select" id="editRegStatus">
+            <option value="مقبول">مقبول</option>
+            <option value="ينظر فيه">ينظر فيه</option>
+            <option value="مسحوب">مسحوب</option>
+            <option value="يسحب">يسحب</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">حالة الاتصال</label>
+          <select class="form-select" id="editRegContact">
+            <option value="">غير محدد</option>
+            <option value="اكد الحضور">أكد الحضور</option>
+            <option value="لن يحضر">لن يحضر</option>
+            <option value="لم يرد على 3 اتصالات">لم يرد على 3 اتصالات</option>
+            <option value="تم الاتصال">تم الاتصال</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">المهارات الحالية</label>
+        <input type="text" class="form-input" id="editRegSkillsHave">
+      </div>
+      <div class="form-group">
+        <label class="form-label">مهارات للتعلم</label>
+        <input type="text" class="form-input" id="editRegSkillsWant">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ملاحظة</label>
+        <input type="text" class="form-input" id="editRegNote">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button class="btn btn-ghost" onclick="closeModal('editRegistration')">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveEditRegistration()">حفظ التعديلات</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Email Compose Modal -->
+  <div class="modal-overlay" id="modal-emailCompose">
+    <div class="modal" style="width:500px;">
+      <div class="modal-title">إرسال بريد إلكتروني</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">إلى: <span id="emailModalName"
+          style="color:var(--accent);font-weight:700;"></span></div>
+      <div class="form-group">
+        <label class="form-label">البريد الإلكتروني *</label>
+        <input type="email" class="form-input" id="emailToAddress" placeholder="example@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">الاسم</label>
+        <input type="text" class="form-input" id="emailToName">
+      </div>
+      <div class="form-group">
+        <label class="form-label">نص الرسالة *</label>
+        <textarea class="form-input" id="emailMessage" rows="5" placeholder="اكتب رسالتك هنا..."
+          style="resize:vertical;"></textarea>
+      </div>
+      <!-- Quick templates -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">قوالب سريعة:</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" onclick="setEmailTemplate('welcome')">ترحيب</button>
+          <button class="btn btn-ghost btn-sm" onclick="setEmailTemplate('session')">تذكير جلسة</button>
+          <button class="btn btn-ghost btn-sm" onclick="setEmailTemplate('absent')">متابعة غياب</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="closeModal('emailCompose')">إلغاء</button>
+        <button class="btn btn-primary" id="emailSendBtn" onclick="submitEmail()">إرسال</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Bulk Email Modal -->
+  <div class="modal-overlay" id="modal-emailBulk">
+    <div class="modal" style="width:560px;">
+      <div class="modal-title">إرسال رسالة للكل</div>
+      <div id="bulkRecipientsBadge" style="font-size:12px;color:var(--text-muted);margin-bottom:16px;"></div>
+
+      <div class="form-group">
+        <label class="form-label">الرسالة *</label>
+        <textarea class="form-input" id="bulkMessage" rows="5" placeholder="اكتب رسالتك هنا..."
+          style="resize:vertical;"></textarea>
+      </div>
+
+
+
+      <!-- File link -->
+      <div class="form-group">
+        <label class="form-label">رابط ملف (اختياري)</label>
+        <input type="text" class="form-input" id="bulkFileLink" placeholder="https://drive.google.com/... أو أي رابط">
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">ارفع الملف على Google Drive وضع رابطه هنا —
+          سيُضاف تلقائياً في الرسالة</div>
+      </div>
+
+      <!-- Progress -->
+      <div id="bulkProgress" style="display:none;margin-bottom:12px;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;" id="bulkProgressText">جاري الإرسال...
+        </div>
+        <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+          <div id="bulkProgressBar"
+            style="height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width 0.3s;"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-ghost" id="bulkCancelBtn" onclick="closeModal('emailBulk')">إلغاء</button>
+        <button class="btn btn-primary" id="bulkSendBtn" onclick="submitBulkEmail()">إرسال للكل</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Member Detail Modal -->
+  <div class="modal-overlay" id="modal-memberDetail">
+    <div class="modal" style="width:520px;">
+      <div class="modal-title" id="memberDetailTitle">بيانات العضو</div>
+      <div id="memberDetailContent"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button class="btn btn-ghost" onclick="closeModal('memberDetail')">إغلاق</button>
+        <button class="btn btn-ghost btn-sm" id="memberDetailUndoBtn" style="color:var(--accent);display:none;"
+          onclick="undoMemberReset()">إلغاء التصفير</button>
+        <button class="btn btn-ghost btn-sm" id="memberDetailEmailBtn" style="color:var(--blue);display:none;"
+          onclick="memberDetailEmail()">إرسال بريد</button>
+        <button class="btn btn-primary btn-sm" id="memberDetailEditBtn" style="background:#f5a623;box-shadow:none;"
+          onclick="memberDetailEdit()">تعديل</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Registration Modal -->
+  <div class="modal-overlay" id="modal-addRegistration">
+    <div class="modal" style="width:560px;">
+      <div class="modal-title">تسجيل يدوي — عضو جديد</div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">الاسم الكامل *</label>
+          <input type="text" class="form-input" id="newRegName" placeholder="الاسم واللقب">
+        </div>
+        <div class="form-group">
+          <label class="form-label">العمر</label>
+          <input type="number" class="form-input" id="newRegAge" placeholder="العمر">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">المدينة</label>
+          <input type="text" class="form-input" id="newRegCity" placeholder="المدينة">
+        </div>
+        <div class="form-group">
+          <label class="form-label">رقم الهاتف</label>
+          <input type="text" class="form-input" id="newRegPhone" placeholder="05XXXXXXXX">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">البريد الإلكتروني</label>
+        <input type="email" class="form-input" id="newRegEmail" placeholder="example@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">رابط فيسبوك / إنستغرام</label>
+        <input type="text" class="form-input" id="newRegFacebook" placeholder="https://...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">المهارات الحالية</label>
+        <input type="text" class="form-input" id="newRegSkills" placeholder="التصوير، المونتاج...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">المهارات المراد تعلمها</label>
+        <input type="text" class="form-input" id="newRegWantSkills" placeholder="التصميم، الإضاءة...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">الهدف من الانضمام</label>
+        <textarea class="form-input" id="newRegGoal" rows="2" placeholder="الهدف..."
+          style="resize:vertical;"></textarea>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">حالة القبول</label>
+          <select class="form-select" id="newRegStatus">
+            <option value="ينظر فيه">ينظر فيه</option>
+            <option value="مقبول">مقبول</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ملاحظة</label>
+          <input type="text" class="form-input" id="newRegNote" placeholder="ملاحظة اختيارية">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button class="btn btn-ghost" onclick="closeModal('addRegistration')">إلغاء</button>
+        <button class="btn btn-primary" onclick="submitManualRegistration()">حفظ التسجيل</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+
+</html>

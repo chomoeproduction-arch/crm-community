@@ -1,2 +1,2 @@
-# crm-community
+# crmcommunity
 crmcommunity
