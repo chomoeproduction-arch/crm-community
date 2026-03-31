@@ -1636,6 +1636,10 @@ function updateSidebarUser(found) {
   const canManageAdmins = isAmin || !!perms.manage_admins;
   const canViewActivity = isAmin || !!perms.view_activity;
   const canManageBackups = isAmin || !!perms.manage_backups;
+  const canManageMembers = isAmin || !!perms.manage_members;
+  const canManageSessions = isAmin || !!perms.manage_sessions;
+  const canManageAttendance = isAmin || !!perms.manage_attendance;
+  const canManageRegistrations = isAmin || !!perms.manage_registrations;
 
   // Sections - All admins can see these in the old system
   const sessionsBtn = document.getElementById('sidebar-sessions');
@@ -1670,13 +1674,13 @@ function updateSidebarUser(found) {
   const addMemBtn = document.querySelector('button[onclick="openModal(\'addMember\')"]');
   if (addMemBtn) addMemBtn.style.display = canManageMembers ? 'inline-flex' : 'none';
 
-  const newSesBtn = document.querySelector('button[onclick="openModal(\'newSession\')"]');
+  const newSesBtn = document.querySelector('button[onclick="openModal(\'addSession\')"]');
   if (newSesBtn) newSesBtn.style.display = canManageSessions ? 'inline-flex' : 'none';
 
   const attSaveSection = document.getElementById('attendance-save-actions');
   if (attSaveSection) attSaveSection.style.display = canManageAttendance ? 'flex' : 'none';
 
-  const bulkMenu = document.getElementById('membersBulkMenu');
+  const bulkMenu = document.getElementById('membersBulkActions');
   if (bulkMenu) bulkMenu.style.display = canManageMembers ? 'flex' : 'none';
 
   // Set dashboard as default active
@@ -2247,7 +2251,7 @@ async function submitBulkEmail() {
 
 
 function saveLog(action, details) {
-  var user = currentUser ? currentUser.name : 'غير معروف';
+  var user = (currentUser && currentUser.name) ? currentUser.name : (currentUser ? currentUser.username : 'غير معروف');
   var entry = {
     time: new Date().toLocaleString('ar-DZ'),
     user: user,
