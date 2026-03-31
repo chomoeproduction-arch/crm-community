@@ -38,6 +38,7 @@ let USERS = [];
 let currentUser = null;
 let log = [];
 let pendingLogs = [];
+let logResetDirty = false;
 
 function saveUsers() {
   // No local storage save
@@ -285,6 +286,7 @@ function deleteSession(id, e) {
   save();
   renderSessions();
   renderDashboard();
+  saveLog('حذف جلسة', 'تم حذف الجلسة رقم: ' + id);
   toast('تم حذف الجلسة', 'info');
 }
 
@@ -465,12 +467,14 @@ function markAll(state) {
   // تم إزالة الحفظ المحلي
   attendanceDirty = true;
   renderAttendance();
+  saveLog('تحديد حضور كلي', (state === 'present' ? 'تم تحديد الكل حاضر' : 'تم تحديد الكل غائب') + ' في جلسة ' + (sessions.find(s => s.id === activeSessionForAttendance)?.name || ''));
   toast(state === 'present' ? 'تم تسجيل الكل حاضر ✅' : 'تم تسجيل الكل غائب ❌', 'info');
 }
 
 function saveAttendanceManual() {
   save();
   syncDatabase(true);
+  saveLog('حفظ الحضور', 'تم حفظ ومزامنة سجل الحضور للجلسة ' + (sessions.find(s => s.id === activeSessionForAttendance)?.name || ''));
   toast('تم حفظ الحضور ومزامنته بنجاح ✅');
 }
 
@@ -773,6 +777,7 @@ function bulkDeleteMembers() {
   save();
   renderMembersTable();
   renderDashboard();
+  saveLog('حذف أعضاء جماعي', 'تم حذف ' + selectedMembers.size + ' عضو/أعضاء');
   toast('تم حذف الأعضاء المحددين بنجاح', 'info');
 }
 
@@ -783,6 +788,7 @@ function bulkEmailMembers() {
   window._customBulkTargets = targets;
   const badge = document.getElementById('bulkRecipientsBadge');
   if (badge) badge.textContent = 'سيتم الإرسال إلى ' + targets.length + ' عضو محدد';
+  saveLog('مراسلة أعضاء', 'فتح نافذة المراسلة لـ ' + targets.length + ' عضو');
   openModal('emailBulk');
 }
 
@@ -916,6 +922,7 @@ function deleteMember() {
   closeModal('editMember');
   renderMembersTable();
   renderDashboard();
+  saveLog('حذف عضو', 'تم حذف العضو: ' + m.name);
   toast('تم حذف العضو', 'info');
 }
 
@@ -1134,6 +1141,7 @@ function bulkAcceptRegs() {
   if (box) box.checked = false;
   renderRegistrations();
   renderDashboard();
+  saveLog('قبول جماعي', 'تم قبول عدد ' + accepted + ' مسجلاً');
   toast(`تم قبول ${accepted} مسجل وإضافتهم لقائمة الأعضاء`);
 }
 
@@ -1154,6 +1162,7 @@ function bulkRejectRegs() {
   const box = document.getElementById('selectAllRegs');
   if (box) box.checked = false;
   renderRegistrations();
+  saveLog('رفض جماعي', 'تم رفض/سحب عدد ' + rejected + ' مسجلاً');
   toast(`تم رفض/سحب ${rejected} مسجل`, 'info');
 }
 
@@ -1178,6 +1187,7 @@ function bulkDeleteRegs() {
   if (box) box.checked = false;
   renderRegistrations();
   renderDashboard();
+  saveLog('حذف جماعي (تسجيلات)', 'تم حذف عدد من المسجلين نهائياً');
   toast(`تم حذف المقاعد المحددة نهائياً`, 'info');
 }
 
@@ -1192,6 +1202,7 @@ function bulkEmailRegs() {
   window._customBulkTargets = targets;
   const badge = document.getElementById('bulkRecipientsBadge');
   if (badge) badge.textContent = 'سيتم الإرسال إلى ' + targets.length + ' مسجل محدد';
+  saveLog('مراسلة مسجلين', 'فتح نافذة المراسلة لـ ' + targets.length + ' مسجل');
   openModal('emailBulk');
 }
 
@@ -1437,6 +1448,7 @@ function saveEditRegistration() {
   closeModal('editRegistration');
   renderRegistrations();
   renderDashboard();
+  saveLog('تعديل تسجيل', 'تم تعديل بيانات: ' + r.name);
   toast('تم حفظ التعديلات بنجاح ✅');
 }
 
@@ -2248,6 +2260,13 @@ function saveLog(action, details) {
   pendingLogs.push(entry);
 
   logDirty = true;
+
+  // Update UI if on activity log view
+  const activeView = document.querySelector('.view.active');
+  if (activeView && activeView.id === 'view-activityLog') {
+    renderActivityLog();
+  }
+
   if (typeof syncDatabase === 'function') setTimeout(syncDatabase, 300);
 }
 
@@ -2301,11 +2320,15 @@ function renderActivityLog() {
 }
 
 function clearActivityLog() {
-  // No local storage remove
+  if (!confirm('هل أنت متأكد من مسح كافة سجلات النشاط نهائياً من قاعدة البيانات؟')) return;
+
+  log = [];
+  pendingLogs = [];
+  logResetDirty = true;
 
   renderActivityLog();
   if (typeof syncDatabase === 'function') setTimeout(syncDatabase, 300);
-  toast('تم مسح السجل', 'info');
+  toast('تم مسح السجل نهائياً ✅', 'info');
 }
 
 
@@ -2478,7 +2501,13 @@ async function _doSync(callback = null) {
     }
 
     // 4. Activity Logs
-    if (logDirty && pendingLogs.length > 0) {
+    if (logResetDirty) {
+      const { error } = await sbClient.from('activity_logs').delete().neq('id', 0); // Delete all
+      if (error) throw error;
+      logResetDirty = false;
+      logDirty = false;
+      pendingLogs = [];
+    } else if (logDirty && pendingLogs.length > 0) {
       const logsToInsert = pendingLogs.map(l => ({
         user_name: l.user,
         action: l.action,
